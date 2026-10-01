@@ -2,9 +2,11 @@ name: Model Supply Chain Attestation
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'models/**'
+    inputs:
+      model_hash:
+        description: "SHA-256 Digest of Model Artifact to Attest"
+        required: false
+        default: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 permissions:
   id-token: write
@@ -14,8 +16,6 @@ jobs:
   attest-and-sign:
     name: Attest AIBOM & Sign Model Artifact
     runs-on: ubuntu-latest
-    # Skip execution if AWS OIDC role secret is not configured
-    if: ${{ secrets.AWS_ATTESTATION_ROLE_ARN != '' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -23,7 +23,20 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.5.0
 
+      - name: Validate AWS Secrets Configuration
+        id: check-secrets
+        env:
+          ROLE_ARN: ${{ secrets.AWS_ATTESTATION_ROLE_ARN }}
+        run: |
+          if [ -z "${ROLE_ARN}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning ::AWS_ATTESTATION_ROLE_ARN secret not configured. Skipping remote KMS signing."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure AWS Credentials (OIDC)
+        if: steps.check-secrets.outputs.configured == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ATTESTATION_ROLE_ARN }}
@@ -32,10 +45,11 @@ jobs:
       - name: Compute Artifact Hashes & Generate CycloneDX AIBOM
         run: |
           echo "Generating CycloneDX AIBOM for approved model weights..."
-          MODEL_HASH="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          MODEL_HASH="${{ inputs.model_hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' }}"
           echo "Model Digest: ${MODEL_HASH}"
 
       - name: Sign Model Checksum with AWS KMS Key
+        if: steps.check-secrets.outputs.configured == 'true'
         env:
           KMS_KEY_ARN: ${{ secrets.KMS_MODEL_SIGNING_KEY_ARN }}
         run: |

@@ -1,0 +1,56 @@
+name: Policy Verification & Terraform Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify:
+    name: Validate Rego Policies & Terraform
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install Conftest
+        run: |
+          CONFTEST_VERSION="0.51.0"
+          ARCH="x86_64"
+          wget -q "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_${ARCH}.tar.gz"
+          tar xzf "conftest_${CONFTEST_VERSION}_Linux_${ARCH}.tar.gz"
+          sudo mv conftest /usr/local/bin/
+
+      - name: Run Conftest Policy Checks
+        run: |
+          echo "Testing IAM guardrails against escalation exploit (Must FAIL)..."
+          ! conftest test tests/exploits/payload_iam_escalate.json --policy src/policy/rego/iam_guardrails.rego
+
+          echo "Testing Tool Call schema against shell injection (Must FAIL)..."
+          ! conftest test tests/exploits/payload_tool_injection.json --policy src/policy/rego/tool_call_schema.rego
+
+          echo "Testing Tool Call schema against valid SRE request (Must PASS)..."
+          conftest test tests/exploits/payload_tool_valid.json --policy src/policy/rego/tool_call_schema.rego
+
+      - name: Run Full Red vs. Blue Test Harness
+        run: |
+          chmod +x tests/run-verification.sh
+          ./tests/run-verification.sh --all
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Validate Terraform Dev Stack
+        run: |
+          cd terraform/environments/dev
+          terraform init -backend=false
+          terraform validate

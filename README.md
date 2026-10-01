@@ -24,6 +24,11 @@ An end-to-end, deterministic security architecture built on AWS designed to secu
 
 ## The Golden Scenario: Autonomous SRE Incident Responder
 
+<p align="center">
+  <img src="assets/verification-demo.gif" alt="Deterministic Red vs. Blue Verification Run" width="95%">
+</p>
+
+
 All six defensive pillars are demonstrated through a single unified production workflow—an **Autonomous SRE Remediation Agent** responding to operational production alarms:
 
 1. **Ingress:** An untrusted ticket enters via API Gateway. The Ingress Proxy validates Unicode forms and strips zero-width split tokens before prompt composition.

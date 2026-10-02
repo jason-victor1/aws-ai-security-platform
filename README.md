@@ -24,10 +24,15 @@ An end-to-end, deterministic security architecture built on AWS designed to secu
 
 ## The Golden Scenario: Autonomous SRE Incident Responder
 
+### 1. Architectural Data Flow & Trust Boundaries
 <p align="center">
-  <img src="assets/verification-demo.gif" alt="Deterministic Red vs. Blue Verification Run" width="95%">
+  <img src="assets/architecture_flow.gif" alt="Autonomous SRE Remediation Architecture Flow" width="85%">
 </p>
 
+### 2. Live Red vs. Blue Deterministic Verification
+<p align="center">
+  <img src="assets/verification-demo.gif" alt="Deterministic Red vs. Blue Verification Run" width="100%">
+</p>
 
 All six defensive pillars are demonstrated through a single unified production workflow—an **Autonomous SRE Remediation Agent** responding to operational production alarms:
 

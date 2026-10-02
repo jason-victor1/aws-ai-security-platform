@@ -1,0 +1,104 @@
+direction: down
+
+# --- Core Nodes ---
+client: "Untrusted Caller\n(Incident Alert Ticket)" {
+  shape: person
+}
+
+ingress: "Pillar 1: Ingress Token Normalizer\n(NFKC Unicode & Delimiter Defense)" {
+  style: {
+    fill: "#1E293B"
+    font-color: "#FFFFFF"
+    stroke: "#475569"
+    stroke-width: 2
+  }
+}
+
+rag: "Pillar 2: Semantic RAG Provenance\n(Vector Namespace Boundary & Prompt Scrub)" {
+  shape: cylinder
+  style: {
+    fill: "#1E293B"
+    font-color: "#FFFFFF"
+    stroke: "#475569"
+    stroke-width: 2
+  }
+}
+
+broker: "Pillar 5: Ephemeral STS Identity Broker\n(Task-Attenuated 15m Session Policy)" {
+  style: {
+    fill: "#1E293B"
+    font-color: "#FFFFFF"
+    stroke: "#475569"
+    stroke-width: 2
+  }
+}
+
+sandbox: "Pillar 6: Firecracker MicroVM Runner\n(Sub-Second Conftest Rego Policy Gates)" {
+  style: {
+    fill: "#1E293B"
+    font-color: "#FFFFFF"
+    stroke: "#475569"
+    stroke-width: 2
+    stroke-dash: 4
+  }
+}
+
+target: "Target AWS Infrastructure Fabric\n(Scoped ECS Task / EC2 Node)" {
+  shape: cloud
+  style: {
+    fill: "#1E293B"
+    font-color: "#FFFFFF"
+    stroke: "#475569"
+    stroke-width: 2
+  }
+}
+
+# --- Connection Edges ---
+client -> ingress: "1. Payload (Zero-Width Characters & ChatML)"
+ingress -> rag: "2. Normalized Context Envelope"
+rag -> broker: "3. Validated Remediation Intent"
+broker -> sandbox: "4. Scoped STS Credentials"
+sandbox -> target: "5. Policy-Gated Cloud Mutation"
+
+# --- Multi-Step Scenario Progression ---
+scenarios: {
+  step1_ingress: {
+    client.style.fill: "#EF4444"
+    ingress.style.fill: "#F59E0B"
+    ingress.style.font-color: "#000000"
+    ingress.style.stroke: "#EF4444"
+    ingress.style.stroke-width: 4
+  }
+  step2_rag: {
+    ingress.style.fill: "#10B981"
+    ingress.style.font-color: "#FFFFFF"
+    rag.style.fill: "#F59E0B"
+    rag.style.font-color: "#000000"
+    rag.style.stroke: "#EF4444"
+    rag.style.stroke-width: 4
+  }
+  step3_broker: {
+    rag.style.fill: "#10B981"
+    rag.style.font-color: "#FFFFFF"
+    broker.style.fill: "#3B82F6"
+    broker.style.font-color: "#FFFFFF"
+    broker.style.stroke: "#60A5FA"
+    broker.style.stroke-width: 4
+  }
+  step4_sandbox: {
+    broker.style.fill: "#10B981"
+    broker.style.font-color: "#FFFFFF"
+    sandbox.style.fill: "#8B5CF6"
+    sandbox.style.font-color: "#FFFFFF"
+    sandbox.style.stroke: "#A78BFA"
+    sandbox.style.stroke-width: 4
+  }
+  step5_complete: {
+    sandbox.style.fill: "#10B981"
+    sandbox.style.font-color: "#FFFFFF"
+    target.style.fill: "#10B981"
+    target.style.font-color: "#FFFFFF"
+    target.style.stroke: "#34D399"
+    target.style.stroke-width: 4
+  }
+}

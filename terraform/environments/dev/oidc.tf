@@ -1,11 +1,6 @@
-# GitHub OIDC Identity Provider (data or resource)
-data "aws_caller_identity" "current" {}
-
-resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  # Standard GitHub OIDC thumbprint
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1", "1c58a3a8518e8759bf075b76b750d4f2df264fcd"]
+# Reference existing account-level GitHub OIDC provider via URL
+data "aws_iam_openid_connect_provider" "github" {
+  url = "https://token.actions.githubusercontent.com"
 }
 
 # IAM Role assumed by GitHub Actions
@@ -18,7 +13,7 @@ resource "aws_iam_role" "github_attestation_role" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = aws_iam_openid_connect_provider.github.arn
+          Federated = data.aws_iam_openid_connect_provider.github.arn
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
@@ -49,7 +44,7 @@ resource "aws_iam_role_policy" "github_attestation_kms" {
           "kms:GetPublicKey",
           "kms:DescribeKey"
         ]
-        Resource = module.model_registry.kms_key_arn
+        Resource = module.model_registry.model_signing_key_arn
       }
     ]
   })
@@ -62,5 +57,5 @@ output "github_attestation_role_arn" {
 
 output "kms_model_signing_key_arn" {
   description = "KMS Key ARN to configure in GitHub Secrets (KMS_MODEL_SIGNING_KEY_ARN)"
-  value       = module.model_registry.kms_key_arn
+  value       = module.model_registry.model_signing_key_arn
 }

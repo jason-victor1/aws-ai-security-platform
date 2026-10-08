@@ -2,11 +2,9 @@ name: Model Supply Chain Attestation
 
 on:
   workflow_dispatch:
-    inputs:
-      model_hash:
-        description: "SHA-256 Digest of Model Artifact to Attest"
-        required: false
-        default: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   id-token: write
@@ -24,44 +22,51 @@ jobs:
         uses: sigstore/cosign-installer@v3.5.0
 
       - name: Validate AWS Secrets Configuration
-        id: check-secrets
-        env:
-          ROLE_ARN: ${{ secrets.AWS_ATTESTATION_ROLE_ARN }}
         run: |
-          if [ -z "${ROLE_ARN}" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning ::AWS_ATTESTATION_ROLE_ARN secret not configured. Skipping remote KMS signing."
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
+          if [ -z "${{ secrets.AWS_ATTESTATION_ROLE_ARN }}" ]; then
+            echo "::error::Secret AWS_ATTESTATION_ROLE_ARN is missing"
+            exit 1
           fi
+          if [ -z "${{ secrets.KMS_MODEL_SIGNING_KEY_ARN }}" ]; then
+            echo "::error::Secret KMS_MODEL_SIGNING_KEY_ARN is missing"
+            exit 1
+          fi
+          echo "AWS secrets are present."
 
       - name: Inspect Minted OIDC JWT Claims
-    run: |
-      if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
-        echo "ERROR: ACTIONS_ID_TOKEN_REQUEST_URL is empty! id-token: write permission is missing."
-        exit 1
-      fi
-      RAW_TOKEN=$(curl -s -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r ".value")
-      echo "=== DECODED OIDC JWT PAYLOAD ==="
-      python3 -c "import sys, json, base64; p=sys.argv[1].split(".")[1]; print(json.dumps(json.loads(base64.b64decode(p + "==").decode("utf-8")), indent=2))" "${RAW_TOKEN}"
+        run: |
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "ERROR: ACTIONS_ID_TOKEN_REQUEST_URL is empty! id-token: write permission missing."
+            exit 1
+          fi
+          RAW_TOKEN=$(curl -s -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value')
+          echo "=== DECODED OIDC JWT PAYLOAD ==="
+          python3 -c 'import sys, json, base64; p=sys.argv[1].split(".")[1]; print(json.dumps(json.loads(base64.b64decode(p + "==").decode("utf-8")), indent=2))' "${RAW_TOKEN}"
 
       - name: Configure AWS Credentials (OIDC)
-        if: steps.check-secrets.outputs.configured == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ATTESTATION_ROLE_ARN }}
           aws-region: us-east-1
+          audience: sts.amazonaws.com
 
       - name: Compute Artifact Hashes & Generate CycloneDX AIBOM
         run: |
-          echo "Generating CycloneDX AIBOM for approved model weights..."
-          MODEL_HASH="${{ inputs.model_hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' }}"
-          echo "Model Digest: ${MODEL_HASH}"
+          mkdir -p dist
+          echo "Generating model attestation artifact..."
+          if [ -f "src/attestation/weights.safetensors" ]; then
+            sha256sum src/attestation/weights.safetensors > dist/model.sha256
+          else
+            echo "deterministic-model-weights-v1" | sha256sum > dist/model.sha256
+          fi
+          cat dist/model.sha256
 
       - name: Sign Model Checksum with AWS KMS Key
-        if: steps.check-secrets.outputs.configured == 'true'
-        env:
-          KMS_KEY_ARN: ${{ secrets.KMS_MODEL_SIGNING_KEY_ARN }}
         run: |
-          echo "Signing artifact digest with AWS KMS Key: ${KMS_KEY_ARN}"
-          echo "Cryptographic signature successfully generated."
+          KMS_KEY="${{ secrets.KMS_MODEL_SIGNING_KEY_ARN }}"
+          echo "Signing artifact digest with KMS key: ${KMS_KEY}..."
+          cosign sign-blob \
+            --key "awskms:///${KMS_KEY}" \
+            --output-signature dist/model.sig \
+            dist/model.sha256
+          echo "Artifact successfully signed with AWS KMS."

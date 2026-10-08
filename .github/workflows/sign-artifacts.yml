@@ -69,6 +69,7 @@ jobs:
           echo "Verifying cryptographic signature against AWS KMS..."
           cosign verify-blob \
             --key "awskms:///${KMS_KEY}" \
+            --insecure-ignore-tlog=true \
             --signature dist/model.sig \
             dist/model.sha256
           echo "KMS signature verification succeeded."

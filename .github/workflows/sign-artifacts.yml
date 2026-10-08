@@ -31,17 +31,7 @@ jobs:
             echo "::error::Secret KMS_MODEL_SIGNING_KEY_ARN is missing"
             exit 1
           fi
-          echo "AWS secrets are present."
-
-      - name: Inspect Minted OIDC JWT Claims
-        run: |
-          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
-            echo "ERROR: ACTIONS_ID_TOKEN_REQUEST_URL is empty! id-token: write permission missing."
-            exit 1
-          fi
-          RAW_TOKEN=$(curl -s -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value')
-          echo "=== DECODED OIDC JWT PAYLOAD ==="
-          python3 -c 'import sys, json, base64; p=sys.argv[1].split(".")[1]; print(json.dumps(json.loads(base64.b64decode(p + "==").decode("utf-8")), indent=2))' "${RAW_TOKEN}"
+          echo "AWS secrets validated."
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -53,7 +43,7 @@ jobs:
       - name: Compute Artifact Hashes & Generate CycloneDX AIBOM
         run: |
           mkdir -p dist
-          echo "Generating model attestation artifact..."
+          echo "Computing artifact digest..."
           if [ -f "src/attestation/weights.safetensors" ]; then
             sha256sum src/attestation/weights.safetensors > dist/model.sha256
           else
@@ -67,6 +57,18 @@ jobs:
           echo "Signing artifact digest with KMS key: ${KMS_KEY}..."
           cosign sign-blob \
             --key "awskms:///${KMS_KEY}" \
+            --tlog-upload=false \
+            --yes \
             --output-signature dist/model.sig \
             dist/model.sha256
           echo "Artifact successfully signed with AWS KMS."
+
+      - name: Verify Signed Artifact
+        run: |
+          KMS_KEY="${{ secrets.KMS_MODEL_SIGNING_KEY_ARN }}"
+          echo "Verifying cryptographic signature against AWS KMS..."
+          cosign verify-blob \
+            --key "awskms:///${KMS_KEY}" \
+            --signature dist/model.sig \
+            dist/model.sha256
+          echo "KMS signature verification succeeded."

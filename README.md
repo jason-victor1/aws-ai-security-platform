@@ -1,147 +1,133 @@
-# AWS AI Security Platform: 6-Pillar Reference Implementation
+# AWS AI Security Platform
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Terraform](https://img.shields.io/badge/IaC-Terraform_1.5+-623CE4.svg)](terraform/)
-[![Policy-as-Code](https://img.shields.io/badge/Policy-Conftest_%2F_Rego_v1-00ADD8.svg)](src/policy/rego/)
-[![Runtime Isolation](https://img.shields.io/badge/Runtime-AWS_Lambda_%2F_Firecracker-FF9900.svg)](src/sandbox_runner/)
+[![Validate Rego Policies & Terraform](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/ci.yml)
+[![Model Supply Chain Attestation](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/sign-artifacts.yml/badge.svg)](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/sign-artifacts.yml)
+[![Branch Protection](https://img.shields.io/badge/branch%20protection-main%20enforced-success?logo=github)](https://github.com/jason-victor1/aws-ai-security-platform/blob/main/SECURITY.md)
+[![Security Policy](https://img.shields.io/badge/security-SECURITY.md-blue?logo=security)](./SECURITY.md)
 
-An end-to-end, deterministic security architecture built on AWS designed to secure autonomous AI agent runtimes and LLM workloads. This platform bridges the seam where probabilistic model reasoning touches deterministic cloud infrastructure—eliminating token smuggling, indirect prompt injection, model weight tampering, and non-human identity (NHI) privilege escalation.
-
----
-
-## Architectural Threat Model: The Physics-to-Cognition Stack
-
-| Abstraction Layer | Threat / Vulnerability Vector | Deterministic Control Plane |
-| :--- | :--- | :--- |
-| **Cognition / Ingress** | Tokenizer Smuggling & Split-Token Boundary Evasion | **Pillar 1:** Unicode NFKC & Token Normalizer Proxy |
-| **Data / Semantic RAG** | Context Poisoning & Indirect Prompt Injection | **Pillar 2:** Vector Namespace Isolation & Sanitizer |
-| **Model Artifacts** | Backdoored Checkpoints & Deserialization Exploits | **Pillar 3:** KMS-Backed Cosign Attestation & AIBOM |
-| **Compute Fabric** | Unauthenticated RDMA Snooping & KV-Cache Bleed | **Pillar 4:** Air-Gapped Inference VPC (Zero Egress) |
-| **Non-Human Identity** | Confused Deputy & Over-Privileged Static Keys | **Pillar 5:** Ephemeral STS Broker (Task-Scoped Sessions) |
-| **Execution Host** | Unsandboxed MCP Tools & Runaway Billing Loops | **Pillar 6:** Firecracker MicroVMs & Conftest Rego Gates |
+> **Deterministic Control Plane for Autonomous AI Agents and LLM Workloads on AWS.**  
+> Enforces zero-trust isolation, ephemeral IAM brokering, supply-chain weight attestation, and real-time execution circuit breakers to prevent model exploitation, prompt injection escapes, and ambient authority compromise.
 
 ---
 
-## The Golden Scenario: Autonomous SRE Incident Responder
-
-### 1. Architectural Data Flow & Trust Boundaries
-<p align="center">
-  <img src="assets/architecture_flow.gif" alt="Autonomous SRE Remediation Architecture Flow" width="85%">
-</p>
-
-### 2. Live Red vs. Blue Deterministic Verification
-<p align="center">
-  <img src="assets/verification-demo.gif" alt="Deterministic Red vs. Blue Verification Run" width="100%">
-</p>
-
-All six defensive pillars are demonstrated through a single unified production workflow—an **Autonomous SRE Remediation Agent** responding to operational production alarms:
-
-1. **Ingress:** An untrusted ticket enters via API Gateway. The Ingress Proxy validates Unicode forms and strips zero-width split tokens before prompt composition.
-2. **Context:** The agent retrieves operational runbooks from S3. The RAG Sanitizer enforces tenant namespace boundaries and scrubs indirect prompt injections.
-3. **Model Attestation:** The inference runtime verifies model weights (`.safetensors`) and CycloneDX AIBOM checksums against an asymmetric AWS KMS key.
-4. **Isolated Fabric:** Model serving runs inside an air-gapped VPC with zero internet egress and isolated cache boundaries.
-5. **Dynamic Identity:** The agent requests execution credentials. The STS Broker validates requested actions and generates a 15-minute attenuated session policy restricted strictly to target resource ARNs.
-6. **Sandboxed Execution:** Remediation commands execute inside Firecracker-isolated Lambda microVMs, gated deterministically by Conftest Rego policies and an EventBridge circuit breaker.
-
----
-
-## The 6-Pillar Defensive Matrix
-
-| Pillar | AWS Primitive | Defensive Mechanism | Source |
-| :--- | :--- | :--- | :--- |
-| **1. Ingress Normalization** | API Gateway + Lambda | Enforces NFKC Unicode normalization; eliminates zero-width split tokens and strips ChatML/Llama delimiter injections (`<|im_start|>`). | `src/gateway/` |
-| **2. Semantic Context Security** | Amazon S3 + KMS + Lambda | Validates vector metadata against authenticated tenant IDs; parses retrieved runbooks to drop imperative override phrases. | `src/rag_sanitizer/` |
-| **3. Model Supply Chain** | AWS KMS + S3 Registry | Restricts runtime model loading exclusively to cryptographically attested `.safetensors` matching CycloneDX AIBOM SHA-256 manifests. | `src/attestation/` |
-| **4. Inference Fabric Isolation** | VPC + Gateway Endpoints | Establishes an air-gapped VPC with zero internet gateways and zero NAT routing, restricting network traffic to internal VPC CIDRs and S3 endpoints. | `terraform/modules/04-inference-runtime/` |
-| **5. Non-Human Identity (NHI)** | AWS STS + IAM | Eliminates static credentials. Issues short-lived STS credentials bounded by dynamic, task-attenuated inline session policies. | `src/sts_broker/` |
-| **6. MicroVM Sandboxing** | AWS Lambda + Conftest | Executes tools inside Firecracker microVMs with zero ambient AWS permissions. Enforces Rego v1 invariants on IAM mutations and CLI parameters. | `src/sandbox_runner/` |
-
----
-
-## Repository Layout
+## Stage 1: Hero Architecture & Execution Flow
 
 ```text
-aws-ai-security-platform/
-├── .github/workflows/
-│   ├── policy-test.yml              # Conftest Rego unit verification
-│   └── sign-artifacts.yml           # Cosign KMS model signing & AIBOM workflow
-├── architecture/
-│   └── adr/                         # Architecture Decision Records (ADR 001–006)
-├── src/
-│   ├── gateway/                     # [Pillar 1] Ingress normalization proxy
-│   ├── rag_sanitizer/               # [Pillar 2] RAG tenant filter & prompt sanitizer
-│   ├── attestation/                 # [Pillar 3] AIBOM hash & format verification engine
-│   ├── sts_broker/                  # [Pillar 5] Ephemeral STS credential broker
-│   ├── sandbox_runner/              # [Pillar 6] Firecracker tool execution runner
-│   └── policy/rego/                 # Rego v1 deterministic policy definitions
-│       ├── iam_guardrails.rego
-│       ├── tool_call_schema.rego
-│       └── terraform_invariants.rego
-├── terraform/
-│   ├── environments/dev/            # Wired 6-pillar deployment environment
-│   └── modules/
-│       ├── 01-ingress-gateway/
-│       ├── 02-rag-datastore/
-│       ├── 03-model-registry/
-│       ├── 04-inference-runtime/
-│       ├── 05-sts-broker/
-│       └── 06-sandbox-circuit/
-└── tests/
-    ├── exploits/                    # Deterministic attack payloads
-    ├── harness/                     # Local test suites
-    └── run-verification.sh          # Red vs. Blue dual-mode verification harness
++---------------------------------------------------------------------------------------------------------+
+|                                    AWS AI SECURITY PLATFORM RUNTIME                                     |
++---------------------------------------------------------------------------------------------------------+
+|                                                                                                         |
+|   Untrusted Ticket / Prompt                                                                             |
+|            |                                                                                            |
+|            v                                                                                            |
+|   +-------------------+    Clean Context    +-------------------+    Signed Weights   +---------------+ |
+|   |  01 Ingress Guard | ------------------> |  02 RAG Datastore | ------------------> | 03 Model Reg. | |
+|   |  (Token Normal.)  |                     |  (KMS / S3 San.)  |                     | (Cosign / KMS)| |
+|   +-------------------+                     +-------------------+                     +---------------+ |
+|            |                                                                                  |         |
+|            | Policy Breach                                                            Payload | Attested|
+|            v                                                                                  v         |
+|   [ 403 Forbidden ]                                                                   +---------------+ |
+|                                                                                       | 04 Inference  | |
+|                                                                                       | (Isolated VPC)| |
+|                                                                                       +---------------+ |
+|                                                                                               |         |
+|                                                                                        Action | Proposal|
+|                                                                                               v         |
+|   +-------------------+     Scoped STS      +-------------------+    Constrained Ops  +---------------+ |
+|   | 06 Circuit Breaker| <------------------ |   05 STS Broker   | <------------------ | Agent Engine  | |
+|   | (Kill Switch/Bus) |                     | (Downscoped Sess) |                     |  (Execution)  | |
+|   +-------------------+                     +-------------------+                     +---------------+ |
++---------------------------------------------------------------------------------------------------------+
+```
+
+### End-to-End Operational Flow
+1. **L7 Ingress Sanitization:** API Gateway strips homoglyphs, invisible Unicode, and prompt boundary escapes before Lambda payload deserialization.
+2. **Context Attestation:** RAG vector lookups are evaluated against KMS-encrypted S3 data stores; context poisoning attempts trigger immediate quarantine.
+3. **Cryptographic Model Verification:** Model weights are verified against asymmetric AWS KMS signatures (`ECC_NIST_P256`) via Cosign prior to memory ingestion.
+4. **Air-Gapped Inference:** LLM workloads run in an isolated VPC with zero public egress, communicating solely via private AWS VPC Endpoints.
+5. **Least-Privilege STS Brokering:** Dynamic IAM session tokens downscope ambient privileges based on specific action ticket IDs with 15-minute expirations.
+6. **Execution Containment & Kill Switch:** Out-of-bounds agent operations trip the EventBridge security bus, firing Lambda-based container isolation and session revocation.
+
+---
+
+## Stage 2: Threat Modeling & Adversarial Taxonomy
+
+This architecture is modeled against the **MITRE ATLAS** (Adversarial Threat Landscape for Artificial-Intelligence Systems) framework and the **OWASP Top 10 for LLMs**:
+
+| Threat ID | Threat Vector | Attack Scenario | Architectural Countermeasure | Deterministic Policy Gate |
+| :--- | :--- | :--- | :--- | :--- |
+| **AML.T0051** | Prompt Injection (Direct & Indirect) | Attacker injects delimiters inside user ticket payload to force unauthorized EC2 termination. | L7 Normalizer + Rego Grammar Enforcement | `rego/policies/ingress_validation.rego` |
+| **AML.T0043** | Vector / Context Poisoning | Malicious runbook markdown injected into RAG embeddings overrides agent operational rules. | Client-side KMS Envelope Encryption & Clean-Room Context Parser | `rego/policies/rag_sanitization.rego` |
+| **AML.T0010** | Supply Chain Model Tampering | Backdoored safetensors weights published to S3 model bucket. | Sigstore/Cosign verification with KMS asymmetric key pair prior to load | `.github/workflows/sign-artifacts.yml` |
+| **AML.T0048** | Exfiltration via Ambient Authority | Compromised agent attempts network egress to external C2 server. | VPC Private Isolation + Strict NACLs + No Internet Gateway | `terraform/modules/04-inference-runtime` |
+| **AML.T0025** | Privilege Escalation via IAM | Agent leverages broad role permissions to assume administrative control across AWS accounts. | Dynamic STS Downscoper generating session policies with `< 15 min` TTL | `terraform/modules/05-sts-broker` |
+| **AML.T0031** | Runaway Execution Loop | Agent enters autonomous destructive loop or denial-of-wallet tool invocation. | EventBridge Circuit Breaker rule triggering instant IAM session revocation | `terraform/modules/06-sandbox-circuit` |
+
+---
+
+## Stage 3: Defensive Architecture Matrix
+
+The platform is structured into six independent, decoupled security pillars:
+
+| Pillar | Subsystem | Enforcement Type | Core AWS Resources | Cryptographic / Policy Controls |
+| :--- | :--- | :--- | :--- | :--- |
+| **01** | Ingress Gateway | Deterministic Filter | API Gateway v2, Lambda (Python 3.11) | Unicode NFC normalization, JSON Schema, Token budget limits |
+| **02** | RAG Datastore | Storage Boundary | Amazon S3, AWS KMS, GuardDuty S3 | KMS CMK encryption, Object Lock, MIME quarantine |
+| **03** | Model Registry | Supply Chain Attestation | Amazon S3, Asymmetric KMS (`ECC_NIST_P256`) | Cosign blob signing, CycloneDX AIBOM SHA-256 digest pinning |
+| **04** | Inference Runtime | Network Isolation | VPC, Private Subnets, S3 Gateway Endpoint | Zero-egress Security Groups, AWS PrivateLink |
+| **05** | STS Token Broker | Identity Boundary | AWS STS, Lambda, Dynamic IAM Session Policies | Ephemeral credentials, SID-pinned boundary policies |
+| **06** | Sandbox Circuit | Kill Switch / Containment | EventBridge Event Bus, CloudWatch Alarms | Real-time agent quarantine, IAM policy revocation |
+
+---
+
+## Stage 4: Deterministic Verification
+
+All security boundaries are validated deterministically via reproducible Red-vs-Blue test suites and Open Policy Agent (Conftest) Rego evaluation.
+
+### Quick Start: Local Test Harness
+
+```bash
+# 1. Clone repository
+git clone https://github.com/jason-victor1/aws-ai-security-platform.git
+cd aws-ai-security-platform
+
+# 2. Execute deterministic verification harness
+./scripts/run-verification.sh
+```
+
+### Verification Suite Outputs
+
+```text
+[✓] Step 1: Evaluating Infrastructure-as-Code Policies (Conftest / Rego)...
+    PASS - terraform/modules/01-ingress-gateway (14/14 checks passed)
+    PASS - terraform/modules/04-inference-runtime (18/18 checks passed)
+    PASS - terraform/modules/05-sts-broker (12/12 checks passed)
+
+[✓] Step 2: Red Team Adversarial Simulation (Attack Payloads)...
+    [ATTACK 01] Delimiter Split Injection:      BLOCKED (HTTP 403 Forbidden)
+    [ATTACK 02] Malicious S3 Runbook Poisoning: BLOCKED (Digest Mismatch)
+    [ATTACK 03] Unsigned Model Checkpoint:      BLOCKED (Cosign Verification Failed)
+    [ATTACK 04] Egress Data Exfiltration:       BLOCKED (Network Unreachable)
+    [ATTACK 05] Unauthorized IAM Escalation:    BLOCKED (AccessDeniedException)
+    [ATTACK 06] Runaway Agent Execution Loop:   TERMINATED (Circuit Breaker Tripped)
+
+[✓] ALL 6 DEFENSIVE GATES DETERMINISTICALLY ATTESTED.
 ```
 
 ---
 
-## Quickstart & Verification
+## Stage 5: Architecture Decision Records (ADRs) & Governance
 
-### Prerequisites
-* Python 3.10+
-* [Conftest](https://www.conftest.dev/) (`brew install conftest`)
-* [Terraform](https://www.terraform.io/) 1.5+
-* AWS CLI v2 (configured for deployment)
+Architectural choices are documented via formal Architecture Decision Records:
 
-### 1. Run the Exploit vs. Defend Verification Suite
-The repository includes an automated test harness demonstrating Red Team attacks against an unhardened baseline followed by Blue Team deterministic blocks across all six pillars:
+* [ADR-001: Deterministic Token Normalization over LLM-based Self-Guardrails](./docs/adr/001-deterministic-token-normalization.md)
+* [ADR-002: Keyless OIDC vs Static IAM Machine Users in CI/CD](./docs/adr/002-keyless-oidc-attestation.md)
+* [ADR-003: Asymmetric KMS Cosign Signatures for Model Weight Provenance](./docs/adr/003-kms-cosign-weight-provenance.md)
+* [ADR-004: Ephemeral STS Downscoping vs Permanent Workload Roles](./docs/adr/004-ephemeral-sts-downscoping.md)
+* [ADR-005: EventBridge Kill-Switch Containment vs Reactive CloudWatch Metrics](./docs/adr/005-eventbridge-kill-switch.md)
 
-```bash
-# Execute the full Red vs. Blue suite locally
-./tests/run-verification.sh --all
-```
-
-To run individual operational modes:
-```bash
-./tests/run-verification.sh --unprotected   # Simulates default AI system vulnerabilities
-./tests/run-verification.sh --hardened      # Executes 6-pillar deterministic policy gates
-```
-
-### 2. Validate Infrastructure Code
-```bash
-cd terraform/environments/dev
-terraform init
-terraform validate
-terraform plan
-```
-
----
-
-## Policy-as-Code Enforcement Details
-
-All guardrails enforce strict **Rego v1** semantics to guarantee deterministic sub-second evaluation:
-
-```bash
-# Verify IAM escalation invariants
-conftest test tests/exploits/payload_iam_escalate.json \
-  --policy src/policy/rego/iam_guardrails.rego
-
-# Verify Tool Call schema & command-injection invariants
-conftest test tests/exploits/payload_tool_injection.json \
-  --policy src/policy/rego/tool_call_schema.rego
-```
-
----
-
-## License
-
-This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
+### Repository Governance
+* **Vulnerability Disclosure Policy:** Documented in [SECURITY.md](./SECURITY.md) with defined triage SLAs and safe harbor scope.
+* **Branch Protection:** Strict enforcement on `main` requiring passing CI status checks (`Validate Rego Policies & Terraform`) before merging.
+* **Non-Human Identity Security:** Zero static access keys. Workload execution and CI/CD pipelines authenticate exclusively via OpenID Connect (OIDC) and ephemeral STS sessions.

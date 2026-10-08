@@ -1,6 +1,6 @@
 # AWS AI Security Platform
 
-[![Validate Rego Policies & Terraform](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/ci.yml)
+[![Validate Rego Policies & Terraform](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/policy-test.yml/badge.svg)](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/policy-test.yml)
 [![Model Supply Chain Attestation](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/sign-artifacts.yml/badge.svg)](https://github.com/jason-victor1/aws-ai-security-platform/actions/workflows/sign-artifacts.yml)
 [![Branch Protection](https://img.shields.io/badge/branch%20protection-main%20enforced-success?logo=github)](https://github.com/jason-victor1/aws-ai-security-platform/blob/main/SECURITY.md)
 [![Security Policy](https://img.shields.io/badge/security-SECURITY.md-blue?logo=security)](./SECURITY.md)

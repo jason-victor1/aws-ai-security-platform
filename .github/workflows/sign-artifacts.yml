@@ -35,6 +35,16 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Inspect Minted OIDC JWT Claims
+    run: |
+      if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+        echo "ERROR: ACTIONS_ID_TOKEN_REQUEST_URL is empty! id-token: write permission is missing."
+        exit 1
+      fi
+      RAW_TOKEN=$(curl -s -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r ".value")
+      echo "=== DECODED OIDC JWT PAYLOAD ==="
+      python3 -c "import sys, json, base64; p=sys.argv[1].split(".")[1]; print(json.dumps(json.loads(base64.b64decode(p + "==").decode("utf-8")), indent=2))" "${RAW_TOKEN}"
+
       - name: Configure AWS Credentials (OIDC)
         if: steps.check-secrets.outputs.configured == 'true'
         uses: aws-actions/configure-aws-credentials@v4
